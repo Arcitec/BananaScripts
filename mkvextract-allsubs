@@ -1,0 +1,133 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# Copyright 2022 Bananaman (https://github.com/Bananaman/)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# mkvextract-allsubs v1.0
+#
+# Project Site:
+#   https://github.com/Bananaman/BananaScripts/
+#
+# Requires:
+#   Python >= 3.5
+#
+# Usage:
+#   mkvextract-allsubs [one or more MKV files to extract from]
+
+from pathlib import Path
+from pprint import pprint
+import json
+import re
+import subprocess
+import sys
+
+
+if len(sys.argv) < 2:
+    print("You must provide at least one input filename.")
+    exit(1)
+
+
+def has_command(cmd):
+    result = subprocess.run(
+        ["hash", cmd], capture_output=True, shell=False
+    )  # Shell must be off.
+    return result.returncode == 0
+
+
+for cmd in ["mkvmerge", "mkvextract"]:
+    if not has_command(cmd):
+        print(f"Missing dependency: {cmd}")
+        exit(1)
+
+
+codec_map = {
+    "S_TEXT/UTF8": "srt",
+    "S_TEXT/ASS": "ssa",
+    "S_TEXT/USF": "usf",
+    "S_VOBSUB": "sub",
+    "S_HDMV/PGS": "sup",
+}
+
+
+files: list[Path] = []
+for arg in sys.argv[1:]:
+    file = Path(arg)
+    if not file.is_file():
+        print(f"File doesn't exist: {file}")
+        exit(1)
+    files.append(file)
+
+
+for file in files:
+    result = subprocess.run(
+        ["mkvmerge", "--identify", "--identification-format", "json", str(file)],
+        capture_output=True,
+        shell=False,
+        encoding="utf-8",
+    )
+    if result.returncode != 0:
+        print(f"Error in mkvmerge while parsing: {file}")
+        print(result.stdout.strip())  # Show the actual error (it's in stdout).
+        exit(1)
+
+    d = json.loads(result.stdout)
+    # pprint(d)  # Easy debug.
+
+    if not "tracks" in d:
+        print(f"Invalid JSON output from mkvmerge for file: {file}")
+        exit(1)
+
+    for track in d["tracks"]:
+        track_id = track["id"]
+        p = track["properties"]
+        codec = p["codec_id"] if ("codec_id" in p) else None
+        language = p["language"] if ("language" in p) else None
+        name = p["track_name"] if ("track_name" in p) else None
+
+        if codec is None or codec not in codec_map:
+            continue
+
+        output_name = [
+            file.stem,  # Name without ext.
+            language,  # (opt) 3-letter code such as "eng".
+            str(
+                track_id
+            ),  # Necessary to avoid clobbering when multiple tracks have the same language.
+            f"({name})" if name is not None else None,  # (opt) Track description.
+            codec_map[codec],  # Proper subtitle extension.
+        ]
+
+        output_name = ".".join(filter(lambda x: x is not None, output_name))
+
+        # Remove all illegal filesystem-characters from the filename.
+        # https://en.wikipedia.org/wiki/Filename#Reserved_characters_and_words
+        output_name = re.sub(r"[/\\?%*:|\"<>\x7F\x00-\x1F]", "-", output_name)
+
+        print(f"- Track {track_id}: {output_name}")
+        output_file = file.parent / output_name
+        result = subprocess.run(
+            ["mkvextract", "tracks", str(file), f"{track_id}:{output_file}"],
+            capture_output=True,
+            shell=False,
+            encoding="utf-8",
+        )
+        if result.returncode != 0:
+            print(f"Error while extracting track {track_id} from file: {file}")
+            print(result.stdout.strip())  # Show the actual error (it's in stdout).
+            exit(1)
+
+        # Show the full output path where the subtitle was saved.
+        print(f'  To: "{output_file}"')
