@@ -16,19 +16,27 @@
 # limitations under the License.
 
 
-# mkvextract-allsubs v1.0
+# mkvextract-allsubs v1.1
 #
 # Project Site:
 #   https://github.com/Bananaman/BananaScripts/
 #
 # Requires:
 #   Python >= 3.5
+#   MKVToolNix:
+#   - Linux: Install "mkvtoolnix" via your native package manager.
+#   - Mac: Install Homebrew use it to install the following package:
+#     https://formulae.brew.sh/formula/mkvtoolnix
+#   - Windows: Install Chocolatey and use it to install the following package:
+#     https://community.chocolatey.org/packages/mkvtoolnix
+#     (IMPORTANT: You MUST reboot Windows for the changes to take effect!)
 #
 # Usage:
 #   mkvextract-allsubs [one or more MKV files to extract from]
 
 from pathlib import Path
 from pprint import pprint
+from shutil import which
 import json
 import re
 import subprocess
@@ -41,10 +49,10 @@ if len(sys.argv) < 2:
 
 
 def has_command(cmd):
-    result = subprocess.run(
-        ["hash", cmd], capture_output=True, shell=False
-    )  # Shell must be off.
-    return result.returncode == 0
+    # Performs a system-agnostic lookup for a command, using the PATH env-var
+    # of the Python process, which is used when running commands via Python.
+    # NOTE: On Windows, it also scans for the ".exe" extension automatically.
+    return which(cmd) is not None
 
 
 for cmd in ["mkvmerge", "mkvextract"]:
