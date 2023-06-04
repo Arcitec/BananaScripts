@@ -98,6 +98,9 @@ for file in files:
         print(f"Invalid JSON output from mkvmerge for file: {file}")
         exit(1)
 
+    track_list = []
+
+    # generate track list
     for track in d["tracks"]:
         track_id = track["id"]
         p = track["properties"]
@@ -126,16 +129,18 @@ for file in files:
 
         print(f"- Track {track_id}: {output_name}")
         output_file = file.parent / output_name
-        result = subprocess.run(
-            ["mkvextract", "tracks", str(file), f"{track_id}:{output_file}"],
-            capture_output=True,
-            shell=False,
-            encoding="utf-8",
-        )
-        if result.returncode != 0:
-            print(f"Error while extracting track {track_id} from file: {file}")
-            print(result.stdout.strip())  # Show the actual error (it's in stdout).
-            exit(1)
 
-        # Show the full output path where the subtitle was saved.
-        print(f'  To: "{output_file}"')
+        track_list.append(f"{track_id}:{output_file}")
+        print(f"Added track \"{name}\" - {language} - ({track_id}) -> {output_file}")
+
+    # run extraction
+    cmd = ["mkvextract", str(file), "tracks"] + track_list
+    result = subprocess.run(cmd,
+        capture_output=True,
+        shell=False,
+        encoding="utf-8",
+    )
+    if result.returncode != 0:
+        print(f"Error while extracting tracks from file: {file}")
+        print(result.stdout.strip())  # Show the actual error (it's in stdout).
+        exit(1)
